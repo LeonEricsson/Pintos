@@ -59,6 +59,7 @@ int main(void)
 
 
   TITLE("TEST 1: Printing text\n");
+
   bytes_written = write(STDOUT_FILENO, dummyprint, strlen(dummyprint));
   if (bytes_written < 0 || (size_t)bytes_written != strlen(dummyprint))
   {

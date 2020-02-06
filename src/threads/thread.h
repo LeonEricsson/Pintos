@@ -80,6 +80,12 @@ typedef int tid_t;
    only because they are mutually exclusive: only a thread in the
    ready state is on the run queue, whereas only a thread in the
    blocked state is on a semaphore wait list. */
+struct file_descriptor {
+    struct list_elem elem;
+    struct file *file;
+    int nr;
+};
+
 struct thread
   {
     /* Owned by thread.c. */
@@ -97,6 +103,11 @@ struct thread
     uint32_t *pagedir;                  /* Page directory. */
 
 #endif
+
+/*
+  File descriptors defined as an array where fd_list[0] reserved for stdin and
+  [1] for stdout. Elements 2-130 are file*. Array is initialized as NULL.
+*/
 
 #ifdef USERPROG
     struct file *fd_list[130];

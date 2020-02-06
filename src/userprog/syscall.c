@@ -17,7 +17,7 @@ syscall_init (void)
 
 static void
 syscall_handler (struct intr_frame *f UNUSED) {
-  int system_call = *(int*)f->esp;
+  int system_call = *(int*)(f->esp);
 
 
   switch(system_call){
@@ -27,7 +27,9 @@ syscall_handler (struct intr_frame *f UNUSED) {
       break;
     }
     case SYS_EXIT:{
-      int status = *(int*)f->esp+4;
+      int status = *(int*)(f->esp+4);
+      exit(status);
+      break;
     }
     case SYS_EXEC:{
 
@@ -36,8 +38,8 @@ syscall_handler (struct intr_frame *f UNUSED) {
 
     }
     case SYS_CREATE:{
-      const char* file = (char*)f->esp+4;
-      unsigned inital_size = *(unsigned*)f->esp+8;
+      const char* file = *(char**)(f->esp+4);
+      unsigned inital_size = *(unsigned*)(f->esp+8);
       f->eax = create(file, inital_size);
       break;
     }
@@ -45,7 +47,7 @@ syscall_handler (struct intr_frame *f UNUSED) {
 
     }
     case SYS_OPEN:{
-      const char *file_name = (char*)f->esp+4;
+      const char *file_name = *(char**)(f->esp+4);
       f->eax = open(file_name);
       break;
     }
@@ -53,13 +55,17 @@ syscall_handler (struct intr_frame *f UNUSED) {
 
     }
     case SYS_READ:{
-
+      int fd = *(int*)(f->esp+4);
+      void *buffer = *(void**)(f->esp+8);
+      unsigned size = *(unsigned*)(f->esp+12);
+      f->eax = read(fd, buffer, size);
+      break;
 
     }
     case SYS_WRITE:{
-      int fd = *(int*)f->esp+4;
-      void *buffer = (void*)f->esp+8;
-      unsigned size = *(unsigned*)f->esp+12;
+      int fd = *(int*)(f->esp+4);
+      void *buffer = *(void**)(f->esp+8);
+      unsigned size = *(unsigned*)(f->esp+12);
       f->eax = write(fd, buffer, size);
       break;
     }
@@ -71,15 +77,13 @@ syscall_handler (struct intr_frame *f UNUSED) {
 
     }
     case SYS_CLOSE:{
-      int fd = *(int*)f->esp+4;
+      int fd = *(int*)(f->esp+4);
       close(fd);
+      break;
     }
 
   }
 
-
-
-  thread_exit ();
 }
 
 
@@ -93,17 +97,16 @@ syscall_handler (struct intr_frame *f UNUSED) {
 
 
 void halt(){
-  //Done!
   power_off();
 }
 
+
 bool create (const char *file, unsigned inital_size){
-  //Done?
   return filesys_create(file, inital_size);
 }
 
+
 int open (const char *file_name){
-  //Done?
   struct file *file = filesys_open(file_name);
   if(file != NULL){
     for(int i = 2; i < 130 ; i++){
@@ -119,12 +122,14 @@ int open (const char *file_name){
   }
 }
 
+
 void close(int fd){
   if(thread_current()->fd_list[fd] != NULL){
     file_close(thread_current()->fd_list[fd]);
     thread_current()->fd_list[fd] = NULL;
   }
 }
+
 
 int read(int fd, void *buffer, unsigned size){
   if(fd == 0){
@@ -136,7 +141,7 @@ int read(int fd, void *buffer, unsigned size){
     }
     return size;
   }
-  else{
+  else if(fd >= 2 && fd <= 130){
     if(thread_current()->fd_list[fd] != NULL){
       return file_read(thread_current()->fd_list[fd], buffer, size);
     }
@@ -144,15 +149,18 @@ int read(int fd, void *buffer, unsigned size){
       return -1;
     }
   }
+  else{
+    return -1;
+  }
 }
 
+
 int write(int fd, void *buffer, unsigned size){
-  //Done?
   if(fd == 1){
     putbuf(buffer, size);
     return size;
   }
-  else{
+  else if(fd >= 2 && fd <= 130){
     if(thread_current()->fd_list[fd] != NULL){
       return file_write(thread_current()->fd_list[fd], buffer, size);
     }
@@ -160,16 +168,16 @@ int write(int fd, void *buffer, unsigned size){
       return -1;
     }
   }
+  else{
+    return -1;
+  }
 }
 
-
 void exit(int status){
-  // Return status to kernel?
   for(int i = 2; i < 130 ; i++){
     if(thread_current()->fd_list[i] != NULL){
       file_close(thread_current()->fd_list[i]);
     }
   }
-
   thread_exit();
 }
