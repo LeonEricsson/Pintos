@@ -24,6 +24,10 @@
    that are ready to run but not actually running. */
 static struct list ready_list;
 
+/* List of processes in sleeping state, that is, processes
+   that are sleeping waiting to be moved to ready_list */
+static struct list sleeping_list;
+
 /* Idle thread. */
 static struct thread *idle_thread;
 
@@ -57,7 +61,7 @@ bool thread_mlfqs;
 
 static void kernel_thread (thread_func *, void *aux);
 static void idle (void *aux UNUSED);
-static struct thread *running_thread (void);
+static struct thread *running_thread(void);
 static struct thread *next_thread_to_run (void);
 static void init_thread (struct thread *, const char *name, int priority);
 static bool is_thread (struct thread *) UNUSED;
@@ -86,6 +90,7 @@ thread_init (void)
 
   lock_init (&tid_lock);
   list_init (&ready_list);
+  list_init (&sleeping_list);
 
   /* Set up a thread structure for the running thread. */
   initial_thread = running_thread ();
@@ -191,7 +196,9 @@ thread_create (const char *name, int priority,
   sf = alloc_frame (t, sizeof *sf);
   sf->eip = switch_entry;
 
-  for(int i = 2; i < 130 ; i++) t->fd_list[i] = NULL;
+  #ifdef USERPROG
+    for(int i = 2; i < 130 ; i++) t->fd_list[i] = NULL;
+  #endif
 
   /* Add to run queue. */
   thread_unblock (t);
@@ -306,6 +313,35 @@ thread_yield (void)
   schedule ();
   intr_set_level (old_level);
 }
+
+void
+thread_sleep()
+{
+  struct thread *cur = thread_current ();
+  enum intr_level old_level;
+  ASSERT (!intr_context ());
+  old_level = intr_disable ();
+
+  struct list_elem *e;
+  if(!list_empty(&sleeping_list)){
+    for (e = list_begin (&sleeping_list); e != list_end (&sleeping_list);
+         e = list_next(e))
+      {
+        struct thread *t = list_entry (e, struct thread, elem);
+        if(t->end > cur->end){
+          list_insert(e, &cur->elem);
+          break;
+        }
+      }
+  }
+  else{
+    list_push_back(&sleeping_list, &cur->elem);
+  }
+  cur->status = THREAD_SLEEPING;
+  schedule();
+  intr_set_level (old_level);
+}
+
 
 /* Sets the current thread's priority to NEW_PRIORITY. */
 void
@@ -460,6 +496,27 @@ alloc_frame (struct thread *t, size_t size)
 static struct thread *
 next_thread_to_run (void)
 {
+  struct list_elem* e;
+  int64_t ticks = timer_ticks();
+  int i = 0;
+  for (e = list_begin (&sleeping_list); e != list_end (&sleeping_list);
+       e = list_next(e))
+    {
+      struct thread *t = list_entry (e, struct thread, elem);
+      if(t->end <= ticks){
+        list_size(&sleeping_list);
+
+        struct list_elem* temp = e->prev;
+        list_remove(e);
+        list_push_back(&ready_list, e);
+        e = temp;
+        t->status = THREAD_READY;
+      }
+      else break;
+    }
+
+
+
   if (list_empty (&ready_list))
     return idle_thread;
   else
@@ -522,6 +579,7 @@ schedule_tail (struct thread *prev)
 static void
 schedule (void)
 {
+
   struct thread *cur = running_thread ();
   struct thread *next = next_thread_to_run ();
   struct thread *prev = NULL;

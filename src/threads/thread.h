@@ -11,8 +11,9 @@ enum thread_status
     THREAD_RUNNING,     /* Running thread. */
     THREAD_READY,       /* Not running but ready to run. */
     THREAD_BLOCKED,     /* Waiting for an event to trigger. */
-    THREAD_DYING        /* About to be destroyed. */
-  };
+    THREAD_DYING,        /* About to be destroyed. */
+    THREAD_SLEEPING     /* Sleeping thread */
+};
 
 /* Thread identifier type.
    You can redefine this to whatever type you like. */
@@ -80,11 +81,6 @@ typedef int tid_t;
    only because they are mutually exclusive: only a thread in the
    ready state is on the run queue, whereas only a thread in the
    blocked state is on a semaphore wait list. */
-struct file_descriptor {
-    struct list_elem elem;
-    struct file *file;
-    int nr;
-};
 
 struct thread
   {
@@ -94,6 +90,7 @@ struct thread
     char name[16];                      /* Name (for debugging purposes). */
     uint8_t *stack;                     /* Saved stack pointer. */
     int priority;                       /* Priority. */
+    int64_t end;                        /* Tick to end sleep */
 
     /* Shared between thread.c and synch.c. */
     struct list_elem elem;              /* List element. */
