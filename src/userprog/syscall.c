@@ -32,7 +32,9 @@ syscall_handler (struct intr_frame *f UNUSED) {
       break;
     }
     case SYS_EXEC:{
-
+      const char *cmd_line = *(char**)(f->esp+4);
+      f->eax = exec(cmd_line);
+      break;
     }
     case SYS_WAIT:{
 
@@ -98,6 +100,10 @@ syscall_handler (struct intr_frame *f UNUSED) {
 
 void halt(){
   power_off();
+}
+
+tid_t exec (const char *cmd_line){
+    return process_execute(cmd_line);
 }
 
 

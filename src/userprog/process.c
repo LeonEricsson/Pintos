@@ -21,6 +21,14 @@
 static thread_func start_process NO_RETURN;
 static bool load (const char *cmdline, void (**eip) (void), void **esp);
 
+struct parent_child{
+  int exit_status;
+  int alive_count;
+  struct semaphore *sema;
+  void *file_name;
+  bool success;
+};
+
 /* Starts a new thread running a user program loaded from
    FILENAME.  The new thread may be scheduled (and may even exit)
    before process_execute() returns.  Returns the new process's
@@ -28,29 +36,54 @@ static bool load (const char *cmdline, void (**eip) (void), void **esp);
 tid_t
 process_execute (const char *file_name)
 {
+
   char *fn_copy;
   tid_t tid;
+  struct parent_child *family;
+  struct semaphore *sema;
+  sema_init(sema, 0);
+
 
   /* Make a copy of FILE_NAME.
      Otherwise there's a race between the caller and load(). */
+  family = malloc(sizeof(*family));
   fn_copy = palloc_get_page (0);
-  if (fn_copy == NULL)
+  if (fn_copy == NULL || family == NULL)
     return TID_ERROR;
   strlcpy (fn_copy, file_name, PGSIZE);
 
+  /* Declare values of the family*/
+  family->alive_count = 2;
+  family->sema = sema;
+  family->file_name = fn_copy;
+
   /* Create a new thread to execute FILE_NAME. */
-  tid = thread_create (file_name, PRI_DEFAULT, start_process, fn_copy);
-  if (tid == TID_ERROR)
+  tid = thread_create (file_name, PRI_DEFAULT, start_process, family);
+  if (tid == TID_ERROR){
     palloc_free_page (fn_copy);
-  return tid;
+    //palloc_free_page (family);
+    free(family);
+  }
+  else{
+    sema_down(sema);    // Only sleep parent if thread_create was successful
+  }
+
+  /* Return PID/TID if child process could load else return -1*/
+  if(family->success){
+    return tid;
+  }
+  else{
+    return -1;
+  }
 }
 
 /* A thread function that loads a user process and starts it
    running. */
 static void
-start_process (void *file_name_)
+start_process (void *family_)
 {
-  char *file_name = file_name_;
+  struct parent_child *family = family_;
+  char *file_name = family->file_name;
   struct intr_frame if_;
   bool success;
 
@@ -61,10 +94,15 @@ start_process (void *file_name_)
   if_.eflags = FLAG_IF | FLAG_MBS;
   success = load (file_name, &if_.eip, &if_.esp);
 
-  /* If load failed, quit. */
+  /* Wake up parent thread and give status of child*/
+  family->success = success;
+  sema_up(family->sema);
+
+  /* If load failed, quit. Ot */
   palloc_free_page (file_name);
-  if (!success)
+  if (!success){
     thread_exit ();
+  }
 
   /* Start the user process by simulating a return from an
      interrupt, implemented by intr_exit (in
