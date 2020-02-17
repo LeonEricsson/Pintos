@@ -4,8 +4,9 @@
 #include <syscall.h>
 #include <stdarg.h>
 
+//Compile
 int main(void)
-{  
+{
   char *descr = "This is test program v0.1 that tests your implementation basic system calls\n";
   char *test1 = "The first test is to create three files.\n";
   char *test2 = "Now lets write some data to the files. Write some binary data to some files.\n";
@@ -44,7 +45,7 @@ int main(void)
     printf("Could not create test1\n");
     halt();
   }
-	
+
   for(i = 0; i < 2; i++){
     snprintf(sbuf, 50, "test%d", i);
     file[i] = open(sbuf);
@@ -55,18 +56,18 @@ int main(void)
       halt();
     }
   }
-	
+
   write(STDOUT_FILENO, test6, strlen(test6));
   num_bytes_read = read(STDIN_FILENO, sbuf, 10);
   if(num_bytes_read != 10){
     printf("Did not read 10 characters from the console.\n");
     halt();
   }
-	
+
   write(STDOUT_FILENO, test2, strlen(test2));
   write(file[0], test3, strlen(test3));
   write(file[1], binarydata, 10);
-	
+
   write(STDOUT_FILENO, test4, strlen(test4));
   close(file[0]);
   file[0] = open("test0");
@@ -75,7 +76,7 @@ int main(void)
     printf("Could not read back from test0 (%u),  %u characters read instead!\n", (unsigned int)strlen(test3), num_bytes_read);
     halt();
   }
-  
+
   num_bytes_read = read(file[1], sbuf, 10);
   if(num_bytes_read != 10){
     printf("Could not read back binary data from test1\n");
@@ -86,14 +87,14 @@ int main(void)
     halt();
   }
   close(file[1]);
-	
+
   write(STDOUT_FILENO, test5, strlen(test5));
   write(87, "hej", 3);
   num_bytes_read = read(1006, sbuf, 3);
   if(num_bytes_read != -1){
     printf("You should catch that I tried to read from file 1006\n");
   }
-	
+
   write(STDOUT_FILENO, test7, strlen(test7));
   file[2] = open("fdsfa");
   if(file[2] > 1){

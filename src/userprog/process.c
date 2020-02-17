@@ -46,7 +46,8 @@ process_execute (const char *file_name)
 
   /* Make a copy of FILE_NAME.
      Otherwise there's a race between the caller and load(). */
-  family = malloc(sizeof(*family));
+  //family = malloc(sizeof(*family));
+  family = palloc_get_page(0);
   fn_copy = palloc_get_page (0);
   if (fn_copy == NULL || family == NULL)
     return TID_ERROR;
@@ -61,8 +62,8 @@ process_execute (const char *file_name)
   tid = thread_create (file_name, PRI_DEFAULT, start_process, family);
   if (tid == TID_ERROR){
     palloc_free_page (fn_copy);
-    //palloc_free_page (family);
-    free(family);
+    palloc_free_page (family);
+    //free(family);
   }
   else{
     sema_down(sema);    // Only sleep parent if thread_create was successful
@@ -97,6 +98,7 @@ start_process (void *family_)
   /* Wake up parent thread and give status of child*/
   family->success = success;
   sema_up(family->sema);
+  printf(family->alive_count);
 
   /* If load failed, quit. Ot */
   palloc_free_page (file_name);

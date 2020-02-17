@@ -141,9 +141,8 @@ int read(int fd, void *buffer, unsigned size){
   if(fd == 0){
     char* bufferc = (char*)buffer;
     for(int i = 0; i < size; i++){
-      int len = strlen(bufferc);
-      bufferc[len] = input_getc();
-      bufferc[len+1] = '\0';
+      bufferc[i] = input_getc();
+      bufferc[i+1] = '\0';
     }
     return size;
   }
@@ -180,10 +179,5 @@ int write(int fd, void *buffer, unsigned size){
 }
 
 void exit(int status){
-  for(int i = 2; i < 130 ; i++){
-    if(thread_current()->fd_list[i] != NULL){
-      file_close(thread_current()->fd_list[i]);
-    }
-  }
   thread_exit();
 }

@@ -285,6 +285,11 @@ thread_exit (void)
   ASSERT (!intr_context ());
 
 #ifdef USERPROG
+for(int i = 2; i < 130 ; i++){
+  if(thread_current()->fd_list[i] != NULL){
+    file_close(thread_current()->fd_list[i]);
+  }
+}
   process_exit ();
 #endif
 
