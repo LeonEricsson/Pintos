@@ -181,13 +181,7 @@ int write(int fd, void *buffer, unsigned size){
 
 void exit(int status){
   struct thread *t = thread_current();
-  struct list_elem *e;
-  for (e = list_begin (&t->families); e != list_end (&t->families);
-       e = list_next(e))
-    {
-      struct parent_child *f = list_entry (e, struct parent_child, elem);
-      f->exit_status = status;
-    }
-  printf("%s: exit(%d)\n", t->name, status);
+  t->parent->exit_status = status;
+  printf(" %s: exit(%d)\n", t->name, status);
   thread_exit();
 }

@@ -98,7 +98,8 @@ struct thread
 #ifdef USERPROG
     /* Owned by userprog/process.c. */
     uint32_t *pagedir;                  /* Page directory. */
-    struct list families;
+    struct list families;               /* Parent thread has a list of parent_child relations */
+    struct parent_child *parent;        /* Pointer to the parent_child relation that the parent holds*/
 #endif
 
 /*

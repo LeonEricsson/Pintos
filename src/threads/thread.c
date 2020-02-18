@@ -288,22 +288,33 @@ thread_exit (void){
   struct thread *t = thread_current();
 
 #ifdef USERPROG
+
+  /* Close all open files */
   for(int i = 2; i < 130 ; i++){
     if(t->fd_list[i] != NULL){
       file_close(t->fd_list[i]);
     }
   }
-  struct list_elem *e;
 
+  /* Decrement the alive_count in the relations where this thread is a parent,
+     deallocate the memory for the parent_child relation if there is nobody left
+     in the family*/
+  struct list_elem *e;
   for (e = list_begin (&t->families); e != list_end (&t->families);
-       e = list_remove(e))
-    {
+       e = list_remove(e)){
       struct parent_child *f = list_entry (e, struct parent_child, elem);
       f->alive_count--;
       if(f->alive_count == 0){
         palloc_free_page(f);
       }
     }
+
+  /* Decrement the alive_count in the single relation where this thread is a child,
+     deallocate the memory for said relation if this thread is the last in that relation */
+  t->parent->alive_count--;
+  if(t->parent->alive_count == 0){
+    palloc_free_page(t->parent);
+  }
 
   process_exit ();
 #endif

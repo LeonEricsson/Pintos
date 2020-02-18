@@ -83,8 +83,9 @@ start_process (void *family_)
   char *file_name = family->file_name;
   struct intr_frame if_;
   bool success;
-  list_push_back(&thread_current()->families, &family->elem);
+  //list_push_back(&thread_current()->families, &family->elem);
 
+  thread_current()->parent = family;
   /* Initialize interrupt frame and load executable. */
   memset (&if_, 0, sizeof if_);
   if_.gs = if_.fs = if_.es = if_.ds = if_.ss = SEL_UDSEG;
