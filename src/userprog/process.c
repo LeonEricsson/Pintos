@@ -17,17 +17,12 @@
 #include "threads/palloc.h"
 #include "threads/thread.h"
 #include "threads/vaddr.h"
+#include "threads/synch.h"
 
 static thread_func start_process NO_RETURN;
 static bool load (const char *cmdline, void (**eip) (void), void **esp);
 
-struct parent_child{
-  int exit_status;
-  int alive_count;
-  struct semaphore *sema;
-  void *file_name;
-  bool success;
-};
+
 
 /* Starts a new thread running a user program loaded from
    FILENAME.  The new thread may be scheduled (and may even exit)
@@ -40,33 +35,34 @@ process_execute (const char *file_name)
   char *fn_copy;
   tid_t tid;
   struct parent_child *family;
-  struct semaphore *sema;
-  sema_init(sema, 0);
+  struct semaphore sema;
+  sema_init(&sema, 0);
 
 
   /* Make a copy of FILE_NAME.
      Otherwise there's a race between the caller and load(). */
-  //family = malloc(sizeof(*family));
+
   family = palloc_get_page(0);
   fn_copy = palloc_get_page (0);
   if (fn_copy == NULL || family == NULL)
     return TID_ERROR;
   strlcpy (fn_copy, file_name, PGSIZE);
-
+  struct thread *t = thread_current();
   /* Declare values of the family*/
   family->alive_count = 2;
-  family->sema = sema;
+  family->sema = &sema;
   family->file_name = fn_copy;
+  family->exit_status = -1;
+  list_push_back(&thread_current()->families, &family->elem);
 
   /* Create a new thread to execute FILE_NAME. */
   tid = thread_create (file_name, PRI_DEFAULT, start_process, family);
   if (tid == TID_ERROR){
     palloc_free_page (fn_copy);
     palloc_free_page (family);
-    //free(family);
   }
   else{
-    sema_down(sema);    // Only sleep parent if thread_create was successful
+    sema_down(&sema);    // Only sleep parent if thread_create was successful
   }
 
   /* Return PID/TID if child process could load else return -1*/
@@ -87,6 +83,7 @@ start_process (void *family_)
   char *file_name = family->file_name;
   struct intr_frame if_;
   bool success;
+  list_push_back(&thread_current()->families, &family->elem);
 
   /* Initialize interrupt frame and load executable. */
   memset (&if_, 0, sizeof if_);
@@ -98,7 +95,6 @@ start_process (void *family_)
   /* Wake up parent thread and give status of child*/
   family->success = success;
   sema_up(family->sema);
-  printf(family->alive_count);
 
   /* If load failed, quit. Ot */
   palloc_free_page (file_name);

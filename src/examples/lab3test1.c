@@ -6,7 +6,6 @@
 //if lab 3 is correctly implemented this program should call itself in an infinite loop and spawn itself as a child process indefinetly
 //the PID of each child process created should be printed to the screen
 // In order to see if your implementation works check if the PID of each new  child process is incremented as it should
-//Compile please
 int
 main (int argc, char *argv[])
 {

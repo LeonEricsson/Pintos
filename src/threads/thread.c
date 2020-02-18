@@ -92,6 +92,7 @@ thread_init (void)
   list_init (&ready_list);
   list_init (&sleeping_list);
 
+
   /* Set up a thread structure for the running thread. */
   initial_thread = running_thread ();
   init_thread (initial_thread, "main", PRI_DEFAULT);
@@ -198,6 +199,8 @@ thread_create (const char *name, int priority,
 
   #ifdef USERPROG
     for(int i = 2; i < 130 ; i++) t->fd_list[i] = NULL;
+    //list_init(&t->families);
+
   #endif
 
   /* Add to run queue. */
@@ -280,16 +283,28 @@ thread_tid (void)
 /* Deschedules the current thread and destroys it.  Never
    returns to the caller. */
 void
-thread_exit (void)
-{
+thread_exit (void){
   ASSERT (!intr_context ());
+  struct thread *t = thread_current();
 
 #ifdef USERPROG
-for(int i = 2; i < 130 ; i++){
-  if(thread_current()->fd_list[i] != NULL){
-    file_close(thread_current()->fd_list[i]);
+  for(int i = 2; i < 130 ; i++){
+    if(t->fd_list[i] != NULL){
+      file_close(t->fd_list[i]);
+    }
   }
-}
+  struct list_elem *e;
+
+  for (e = list_begin (&t->families); e != list_end (&t->families);
+       e = list_remove(e))
+    {
+      struct parent_child *f = list_entry (e, struct parent_child, elem);
+      f->alive_count--;
+      if(f->alive_count == 0){
+        palloc_free_page(f);
+      }
+    }
+
   process_exit ();
 #endif
 
@@ -415,7 +430,7 @@ idle (void *idle_started_ UNUSED)
       intr_disable ();
       thread_block ();
 
-      /* Re-enable interrupts and wait for the next one.
+      /* Re-enable interrupts and wait for the next one.&foo_list
 
          The `sti' instruction disables interrupts until the
          completion of the next instruction, so these two
@@ -478,6 +493,7 @@ init_thread (struct thread *t, const char *name, int priority)
   t->stack = (uint8_t *) t + PGSIZE;
   t->priority = priority;
   t->magic = THREAD_MAGIC;
+  list_init(&t->families);
 }
 
 /* Allocates a SIZE-byte frame at the top of thread T's stack and
