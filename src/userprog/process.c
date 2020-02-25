@@ -83,7 +83,6 @@ start_process (void *family_)
   char *file_name = family->file_name;
   struct intr_frame if_;
   bool success;
-  //list_push_back(&thread_current()->families, &family->elem);
 
   thread_current()->parent = family;
   /* Initialize interrupt frame and load executable. */
@@ -233,7 +232,7 @@ struct Elf32_Phdr
 #define PF_W 2          /* Writable. */
 #define PF_R 4          /* Readable. */
 
-static bool setup_stack (void **esp);
+static bool setup_stack (void **esp, const char *cmd_line);
 static bool validate_segment (const struct Elf32_Phdr *, struct file *);
 static bool load_segment (struct file *file, off_t ofs, uint8_t *upage,
                           uint32_t read_bytes, uint32_t zero_bytes,
@@ -244,7 +243,7 @@ static bool load_segment (struct file *file, off_t ofs, uint8_t *upage,
    and its initial stack pointer into *ESP.
    Returns true if successful, false otherwise. */
 bool
-load (const char *file_name, void (**eip) (void), void **esp)
+load (const char *cmd_line, void (**eip) (void), void **esp)
 {
   struct thread *t = thread_current ();
   struct Elf32_Ehdr ehdr;
@@ -260,14 +259,15 @@ load (const char *file_name, void (**eip) (void), void **esp)
   process_activate ();
 
   /* Set up stack. */
-  if (!setup_stack (esp)){
+  if (!setup_stack (esp, cmd_line)){
     goto done;
   }
+
 
    /* Uncomment the following line to print some debug
      information. This will be useful when you debug the program
      stack.*/
-/*#define STACK_DEBUG*/
+#define STACK_DEBUG
 
 #ifdef STACK_DEBUG
   printf("*esp is %p\nstack contents:\n", *esp);
@@ -303,10 +303,10 @@ load (const char *file_name, void (**eip) (void), void **esp)
 #endif
 
   /* Open executable file. */
-  file = filesys_open (file_name);
+  file = filesys_open (cmd_line);
   if (file == NULL)
     {
-      printf ("load: %s: open failed\n", file_name);
+      printf ("load: %s: open failed\n", cmd_line);
       goto done;
     }
 
@@ -319,7 +319,7 @@ load (const char *file_name, void (**eip) (void), void **esp)
       || ehdr.e_phentsize != sizeof (struct Elf32_Phdr)
       || ehdr.e_phnum > 1024)
     {
-      printf ("load: %s: error loading executable\n", file_name);
+      printf ("load: %s: error loading executable\n", cmd_line);
       goto done;
     }
 
@@ -504,7 +504,7 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
 /* Create a minimal stack by mapping a zeroed page at the top of
    user virtual memory. */
 static bool
-setup_stack (void **esp)
+setup_stack (void **esp, const char *cmd_line)
 {
   uint8_t *kpage;
   bool success = false;
@@ -514,10 +514,58 @@ setup_stack (void **esp)
     {
       success = install_page (((uint8_t *) PHYS_BASE) - PGSIZE, kpage, true);
       if (success)
-        *esp = PHYS_BASE - 12;
+        *esp = PHYS_BASE;
+
       else
         palloc_free_page (kpage);
     }
+    int counter = 31;
+    char *word_pointers[31];
+    char *token, *save_ptr;
+
+    //Store the actual arguments on the stack directly below physbase
+    for (token = strtok_r (cmd_line, " ", &save_ptr); token != NULL;
+        token = strtok_r (NULL, " ", &save_ptr)){
+          *esp = *esp - (strlen(token)+1);
+           //**(char**)esp = *token;
+           for(int i = 0; i < strlen(token); i++){
+             *(char*)(*esp+i) = token[i];
+           }
+           word_pointers[counter] = *esp;
+           counter--;
+           ASSERT (counter >= 0);
+         }
+    word_pointers[counter] = NULL;
+
+    //Align the stack so that the argv char* are located on addresses divisible by 4
+    for( int i = 0; i < 3; i++){
+        if ((int)*esp % 4 == 0){
+          break;
+        }
+        else{
+          --*esp;
+        }
+    }
+
+    //Store the pointers to the argv on the stack which we saved in word_pointers structure
+    char* args;
+    for(int i = counter; i < 32; i++){
+      *esp = *esp - sizeof(char*);
+      args = word_pointers[i];
+      **(char***)esp = word_pointers[i];
+    }
+
+    //Save the pointer so start of argv pointers, call it argv. Also store argc to the stack and a dummy return address
+    //dubbelpekare?
+    char *argv = *esp;
+    *esp = *esp - sizeof(char**);
+    **(char****)esp = argv;
+    int argc = 32 - counter + 1;
+    *esp = *esp - sizeof(int);
+    **(char**)esp = argc;
+    *esp = *esp - sizeof(void(*)());
+
+
   return success;
 }
 
