@@ -67,6 +67,7 @@ process_execute (const char *file_name)
 
   /* Return PID/TID if child process could load else return -1*/
   if(family->success){
+    family->tid = tid;
     return tid;
   }
   else{
@@ -95,7 +96,7 @@ start_process (void *family_)
   /* Wake up parent thread and give status of child*/
   family->success = success;
   sema_up(family->sema);
-
+  
   /* If load failed, quit. Ot */
   palloc_free_page (file_name);
   if (!success){
@@ -267,7 +268,7 @@ load (const char *cmd_line, void (**eip) (void), void **esp)
    /* Uncomment the following line to print some debug
      information. This will be useful when you debug the program
      stack.*/
-#define STACK_DEBUG
+//#define STACK_DEBUG
 
 #ifdef STACK_DEBUG
   printf("*esp is %p\nstack contents:\n", *esp);

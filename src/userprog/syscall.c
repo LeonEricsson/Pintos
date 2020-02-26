@@ -4,9 +4,11 @@
 #include "threads/interrupt.h"
 #include "threads/thread.h"
 #include "threads/init.h"
+#include "threads/vaddr.h"
 #include "filesys/filesys.h"
 #include "filesys/file.h"
 #include "userprog/process.h"
+#include "userprog/pagedir.h"
 
 static void syscall_handler (struct intr_frame *);
 
@@ -18,6 +20,9 @@ syscall_init (void)
 
 static void
 syscall_handler (struct intr_frame *f UNUSED) {
+  if(is_kernel_vaddr(f->esp)){
+    exit(-1);
+  }
   int system_call = *(int*)(f->esp);
 
 
@@ -34,15 +39,24 @@ syscall_handler (struct intr_frame *f UNUSED) {
     }
     case SYS_EXEC:{
       const char *cmd_line = *(char**)(f->esp+4);
+      if(is_kernel_vaddr(cmd_line) || pagedir_get_page(thread_current()->pagedir, cmd_line) == NULL){
+        exit(-1);
+      }
       f->eax = exec(cmd_line);
       break;
     }
     case SYS_WAIT:{
-
+      tid_t tid = *(tid_t*)(f->esp+4);
+      f->eax = wait(tid);
+      break;
     }
     case SYS_CREATE:{
       const char* file = *(char**)(f->esp+4);
       unsigned inital_size = *(unsigned*)(f->esp+8);
+      if(is_kernel_vaddr(file) || pagedir_get_page(thread_current()->pagedir, file) == NULL
+          || pagedir_get_page(thread_current()->pagedir, file+inital_size) == NULL){
+            exit(-1);
+      }
       f->eax = create(file, inital_size);
       break;
     }
@@ -51,6 +65,9 @@ syscall_handler (struct intr_frame *f UNUSED) {
     }
     case SYS_OPEN:{
       const char *file_name = *(char**)(f->esp+4);
+      if(is_kernel_vaddr(file_name) || pagedir_get_page(thread_current()->pagedir, file_name) == NULL){
+        exit(-1);
+      }
       f->eax = open(file_name);
       break;
     }
@@ -61,6 +78,9 @@ syscall_handler (struct intr_frame *f UNUSED) {
       int fd = *(int*)(f->esp+4);
       void *buffer = *(void**)(f->esp+8);
       unsigned size = *(unsigned*)(f->esp+12);
+      if(is_kernel_vaddr(buffer) || pagedir_get_page(thread_current()->pagedir, buffer) == NULL){
+        exit(-1);
+      }
       f->eax = read(fd, buffer, size);
       break;
 
@@ -69,6 +89,9 @@ syscall_handler (struct intr_frame *f UNUSED) {
       int fd = *(int*)(f->esp+4);
       void *buffer = *(void**)(f->esp+8);
       unsigned size = *(unsigned*)(f->esp+12);
+      if(is_kernel_vaddr(buffer) || pagedir_get_page(thread_current()->pagedir, buffer) == NULL){
+        exit(-1);
+      }
       f->eax = write(fd, buffer, size);
       break;
     }
@@ -92,7 +115,7 @@ syscall_handler (struct intr_frame *f UNUSED) {
 
 // ***************** System call implementation *************************
 
-/*    Questions
+/*    Questionssema_up
 
 
 
@@ -101,6 +124,24 @@ syscall_handler (struct intr_frame *f UNUSED) {
 
 void halt(){
   power_off();
+}
+
+
+// If the child thread is dead can we access parent?
+int wait(tid_t tid){
+    struct thread *t = thread_current();
+    struct parent_child* parent_child;
+    struct list_elem *e;
+    for (e = list_begin (&t->families); e != list_end (&t->families);
+         e = list_remove(e)){
+        struct parent_child *f = list_entry (e, struct parent_child, elem);
+        if(f->tid = tid){
+          parent_child = f;
+          break;
+        }
+      }
+    sema_down(parent_child->sema);
+    return  parent_child->exit_status;
 }
 
 tid_t exec (const char *cmd_line){
@@ -182,6 +223,9 @@ int write(int fd, void *buffer, unsigned size){
 void exit(int status){
   struct thread *t = thread_current();
   t->parent->exit_status = status;
+  /*if(t->parent != NULL){
+    sema_up(t->parent->sema);
+  }*/
   printf(" %s: exit(%d)\n", t->name, status);
   thread_exit();
 }

@@ -6,6 +6,7 @@
 struct parent_child{
   int exit_status;
   int alive_count;
+  tid_t tid;
   struct semaphore *sema;
   void *file_name;
   bool success;
