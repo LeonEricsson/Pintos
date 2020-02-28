@@ -310,10 +310,12 @@ thread_exit (void){
     }
 
   /* Decrement the alive_count in the single relation where this thread is a child,
-     deallocate the memory for said relation if this thread is the last in that relation */
-  t->parent->alive_count--;
-  if(t->parent->alive_count == 0){
-    palloc_free_page(t->parent);
+   deallocate the memory for said relation if this thread is the last in that relation */
+ if(t->parent != NULL){
+    t->parent->alive_count--;
+    if(t->parent->alive_count == 0){
+      palloc_free_page(t->parent);
+    }
   }
 
   process_exit ();

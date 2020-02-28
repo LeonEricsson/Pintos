@@ -96,7 +96,7 @@ start_process (void *family_)
   /* Wake up parent thread and give status of child*/
   family->success = success;
   sema_up(family->sema);
-  
+
   /* If load failed, quit. Ot */
   palloc_free_page (file_name);
   if (!success){
@@ -123,10 +123,23 @@ start_process (void *family_)
    This function will be implemented in problem 2-2.  For now, it
    does nothing. */
 int
-process_wait (tid_t child_tid UNUSED)
+process_wait (tid_t child_tid)
 {
-  while (true) {}
-  return -1;
+  struct thread *t = thread_current();
+  struct parent_child* parent_child;
+  struct list_elem *e;
+  for (e = list_begin (&t->families); e != list_end (&t->families);
+       e = list_remove(e)){
+      struct parent_child *f = list_entry (e, struct parent_child, elem);
+      if(f->tid = child_tid){
+        parent_child = f;
+        break;
+      }
+    }
+  sema_down(parent_child->sema);
+  return parent_child->exit_status;
+  /*while (true) {}
+  return -1;*/
 }
 
 /* Free the current process's resources. */

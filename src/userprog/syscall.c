@@ -129,7 +129,7 @@ void halt(){
 
 // If the child thread is dead can we access parent?
 int wait(tid_t tid){
-    struct thread *t = thread_current();
+    /*struct thread *t = thread_current();
     struct parent_child* parent_child;
     struct list_elem *e;
     for (e = list_begin (&t->families); e != list_end (&t->families);
@@ -141,7 +141,8 @@ int wait(tid_t tid){
         }
       }
     sema_down(parent_child->sema);
-    return  parent_child->exit_status;
+    return  parent_child->exit_status;*/
+    return process_wait(tid);
 }
 
 tid_t exec (const char *cmd_line){
@@ -223,9 +224,9 @@ int write(int fd, void *buffer, unsigned size){
 void exit(int status){
   struct thread *t = thread_current();
   t->parent->exit_status = status;
-  /*if(t->parent != NULL){
+  if(t->parent != NULL){
     sema_up(t->parent->sema);
-  }*/
+  }
   printf(" %s: exit(%d)\n", t->name, status);
   thread_exit();
 }
