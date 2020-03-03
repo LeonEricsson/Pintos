@@ -173,7 +173,7 @@ syscall_handler (struct intr_frame *f UNUSED) {
 
 // ***************** System call implementation *************************
 
-/*    Questionssema_up
+/*    Questions
 
 
 
