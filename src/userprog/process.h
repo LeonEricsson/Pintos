@@ -2,15 +2,17 @@
 #define USERPROG_PROCESS_H
 
 #include "threads/thread.h"
+#include "threads/synch.h"
 
 struct parent_child{
   int exit_status;
   int alive_count;
   tid_t tid;
-  struct semaphore *sema;
+  struct semaphore sema;
   void *file_name;
   bool success;
   struct list_elem elem;
+  struct lock lock;
 };
 
 tid_t process_execute (const char *file_name);

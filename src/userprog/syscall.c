@@ -20,7 +20,7 @@ syscall_init (void)
 
 static void
 syscall_handler (struct intr_frame *f UNUSED) {
-  if(is_kernel_vaddr(f->esp)){
+  if(is_kernel_vaddr(f->esp) || f->esp < 0x08048000){
     exit(-1);
   }
   int system_call = *(int*)(f->esp);
@@ -33,67 +33,117 @@ syscall_handler (struct intr_frame *f UNUSED) {
       break;
     }
     case SYS_EXIT:{
-      int status = *(int*)(f->esp+4);
-      exit(status);
-      break;
-    }
-    case SYS_EXEC:{
-      const char *cmd_line = *(char**)(f->esp+4);
-      if(is_kernel_vaddr(cmd_line) || pagedir_get_page(thread_current()->pagedir, cmd_line) == NULL){
+      if(is_user_vaddr(f->esp+4)){
+        int status = *(int*)(f->esp+4);
+        exit(status);
+        break;
+      }
+      else{
         exit(-1);
       }
-      f->eax = exec(cmd_line);
-      break;
+
+    }
+    case SYS_EXEC:{
+      if(is_user_vaddr(f->esp+4)){
+        const char *cmd_line = *(char**)(f->esp+4);
+        if(is_kernel_vaddr(cmd_line) || pagedir_get_page(thread_current()->pagedir, cmd_line) == NULL){
+          exit(-1);
+        }
+        f->eax = exec(cmd_line);
+        break;
+      }
+      else{
+        exit(-1);
+      }
     }
     case SYS_WAIT:{
-      tid_t tid = *(tid_t*)(f->esp+4);
-      f->eax = wait(tid);
-      break;
+      if(is_user_vaddr(f->esp+4)){
+        tid_t tid = *(tid_t*)(f->esp+4);
+        f->eax = wait(tid);
+        break;
+      }
+      else{
+        exit(-1);
+      }
+
     }
     case SYS_CREATE:{
-      const char* file = *(char**)(f->esp+4);
-      unsigned inital_size = *(unsigned*)(f->esp+8);
-      if(is_kernel_vaddr(file) || pagedir_get_page(thread_current()->pagedir, file) == NULL
-          || pagedir_get_page(thread_current()->pagedir, file+inital_size) == NULL){
-            exit(-1);
+      if(is_user_vaddr(f->esp+8)){
+        const char* file = *(char**)(f->esp+4);
+        unsigned inital_size = *(unsigned*)(f->esp+8);
+        int i = 0;
+        while(true){
+          if(is_kernel_vaddr(file + i) || pagedir_get_page(thread_current()->pagedir, file + i) == NULL){
+                exit(-1);
+            }
+          if(file[i] == NULL) break;
+          i++;
+        }
+        f->eax = create(file, inital_size);
+        break;
       }
-      f->eax = create(file, inital_size);
-      break;
+      else{
+        exit(-1);
+      }
     }
     case SYS_REMOVE:{
 
     }
     case SYS_OPEN:{
-      const char *file_name = *(char**)(f->esp+4);
-      if(is_kernel_vaddr(file_name) || pagedir_get_page(thread_current()->pagedir, file_name) == NULL){
+      if(is_user_vaddr(f->esp+4)){
+        const char *file_name = *(char**)(f->esp+4);
+        int i = 0;
+        while(true){
+          if(is_kernel_vaddr(file_name + i) || pagedir_get_page(thread_current()->pagedir, file_name + i) == NULL){
+            exit(-1);
+          }
+          if(file_name[i] == NULL) break;
+          i++;
+        }
+        f->eax = open(file_name);
+        break;
+      }
+      else{
         exit(-1);
       }
-      f->eax = open(file_name);
-      break;
     }
     case SYS_FILESIZE:{
 
     }
     case SYS_READ:{
-      int fd = *(int*)(f->esp+4);
-      void *buffer = *(void**)(f->esp+8);
-      unsigned size = *(unsigned*)(f->esp+12);
-      if(is_kernel_vaddr(buffer) || pagedir_get_page(thread_current()->pagedir, buffer) == NULL){
+      if(is_user_vaddr(f->esp+12)){
+        int fd = *(int*)(f->esp+4);
+        void *buffer = *(void**)(f->esp+8);
+        unsigned size = *(unsigned*)(f->esp+12);
+        for(int i = 0; i < size; i++){
+          if(is_kernel_vaddr(buffer + i) || pagedir_get_page(thread_current()->pagedir, buffer + i) == NULL){
+            exit(-1);
+          }
+        }
+        f->eax = read(fd, buffer, size);
+        break;
+      }
+      else{
         exit(-1);
       }
-      f->eax = read(fd, buffer, size);
-      break;
 
     }
     case SYS_WRITE:{
-      int fd = *(int*)(f->esp+4);
-      void *buffer = *(void**)(f->esp+8);
-      unsigned size = *(unsigned*)(f->esp+12);
-      if(is_kernel_vaddr(buffer) || pagedir_get_page(thread_current()->pagedir, buffer) == NULL){
+      if(is_user_vaddr(f->esp+12)){
+        int fd = *(int*)(f->esp+4);
+        void *buffer = *(void**)(f->esp+8);
+        unsigned size = *(unsigned*)(f->esp+12);
+        for(int i = 0; i < size; i++){
+          if(is_kernel_vaddr(buffer + i) || pagedir_get_page(thread_current()->pagedir, buffer + i) == NULL){
+            exit(-1);
+          }
+        }
+        f->eax = write(fd, buffer, size);
+        break;
+      }
+      else{
         exit(-1);
       }
-      f->eax = write(fd, buffer, size);
-      break;
     }
     case SYS_SEEK:{
 
@@ -103,9 +153,17 @@ syscall_handler (struct intr_frame *f UNUSED) {
 
     }
     case SYS_CLOSE:{
-      int fd = *(int*)(f->esp+4);
-      close(fd);
-      break;
+      if(is_user_vaddr(f->esp+4)){
+        int fd = *(int*)(f->esp+4);
+        if(fd < 0 || fd > 130){
+          exit(-1);
+        }
+        close(fd);
+        break;
+      }
+      else{
+        exit(-1);
+      }
     }
 
   }
@@ -127,7 +185,6 @@ void halt(){
 }
 
 
-// If the child thread is dead can we access parent?
 int wait(tid_t tid){
     /*struct thread *t = thread_current();
     struct parent_child* parent_child;
@@ -140,7 +197,11 @@ int wait(tid_t tid){
           break;
         }
       }
+<<<<<<< Updated upstream
     sema_down(parent_child->sema);
+=======
+    sema_down(&parent_child->sema);
+>>>>>>> Stashed changes
     return  parent_child->exit_status;*/
     return process_wait(tid);
 }
@@ -171,8 +232,9 @@ int open (const char *file_name){
   }
 }
 
-
+// Måste kolla att FD är en inte mellan 0 och 128
 void close(int fd){
+
   if(thread_current()->fd_list[fd] != NULL){
     file_close(thread_current()->fd_list[fd]);
     thread_current()->fd_list[fd] = NULL;
@@ -185,7 +247,6 @@ int read(int fd, void *buffer, unsigned size){
     char* bufferc = (char*)buffer;
     for(int i = 0; i < size; i++){
       bufferc[i] = input_getc();
-      bufferc[i+1] = '\0';
     }
     return size;
   }
@@ -224,9 +285,9 @@ int write(int fd, void *buffer, unsigned size){
 void exit(int status){
   struct thread *t = thread_current();
   t->parent->exit_status = status;
-  if(t->parent != NULL){
-    sema_up(t->parent->sema);
+  /*if(t->parent != NULL){
+    sema_up(&t->parent->sema);
   }
-  printf(" %s: exit(%d)\n", t->name, status);
+  printf(" %s: exit(%d)\n", t->name, status);*/
   thread_exit();
 }

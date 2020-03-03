@@ -33,10 +33,11 @@ process_execute (const char *file_name)
 {
 
   char *fn_copy;
+  char *temp_copy;
   tid_t tid;
   struct parent_child *family;
   struct semaphore sema;
-  sema_init(&sema, 0);
+  struct lock lock;
 
 
   /* Make a copy of FILE_NAME.
@@ -44,25 +45,35 @@ process_execute (const char *file_name)
 
   family = palloc_get_page(0);
   fn_copy = palloc_get_page (0);
-  if (fn_copy == NULL || family == NULL)
+  temp_copy = palloc_get_page(0);
+  if (fn_copy == NULL || family == NULL || temp_copy == NULL)
     return TID_ERROR;
   strlcpy (fn_copy, file_name, PGSIZE);
+  strlcpy (temp_copy, file_name, PGSIZE);
   struct thread *t = thread_current();
+
+
   /* Declare values of the family*/
+  family->lock = lock;
   family->alive_count = 2;
-  family->sema = &sema;
+  family->sema = sema;
   family->file_name = fn_copy;
   family->exit_status = -1;
+  sema_init(&family->sema, 0);
+  lock_init(&family->lock);
   list_push_back(&thread_current()->families, &family->elem);
-
+  char *save_ptr;
+  file_name = strtok_r (temp_copy, " ", &save_ptr);
+  //palloc_free_page(temp_copy);
   /* Create a new thread to execute FILE_NAME. */
   tid = thread_create (file_name, PRI_DEFAULT, start_process, family);
   if (tid == TID_ERROR){
     palloc_free_page (fn_copy);
     palloc_free_page (family);
+    palloc_free_page (temp_copy);
   }
   else{
-    sema_down(&sema);    // Only sleep parent if thread_create was successful
+    sema_down(&family->sema);    // Only sleep parent if thread_create was successful
   }
 
   /* Return PID/TID if child process could load else return -1*/
@@ -80,6 +91,7 @@ process_execute (const char *file_name)
 static void
 start_process (void *family_)
 {
+   struct thread *t = thread_current();
   struct parent_child *family = family_;
   char *file_name = family->file_name;
   struct intr_frame if_;
@@ -95,7 +107,7 @@ start_process (void *family_)
 
   /* Wake up parent thread and give status of child*/
   family->success = success;
-  sema_up(family->sema);
+  sema_up(&family->sema);
 
   /* If load failed, quit. Ot */
   palloc_free_page (file_name);
@@ -123,10 +135,10 @@ start_process (void *family_)
    This function will be implemented in problem 2-2.  For now, it
    does nothing. */
 int
-process_wait (tid_t child_tid)
+process_wait (tid_t child_tid )
 {
   struct thread *t = thread_current();
-  struct parent_child* parent_child;
+  struct parent_child* parent_child = NULL;
   struct list_elem *e;
   for (e = list_begin (&t->families); e != list_end (&t->families);
        e = list_remove(e)){
@@ -136,8 +148,13 @@ process_wait (tid_t child_tid)
         break;
       }
     }
-  sema_down(parent_child->sema);
-  return parent_child->exit_status;
+  if(parent_child == NULL || (parent_child->sema.value == 0 && parent_child->alive_count == 1)){
+    return -1;
+  }
+  else{
+    sema_down(&parent_child->sema);
+    return parent_child->exit_status;
+  }
   /*while (true) {}
   return -1;*/
 }
@@ -574,7 +591,7 @@ setup_stack (void **esp, const char *cmd_line)
     char *argv = *esp;
     *esp = *esp - sizeof(char**);
     **(char****)esp = argv;
-    int argc = 32 - counter + 1;
+    int argc = 31 - counter;
     *esp = *esp - sizeof(int);
     **(char**)esp = argc;
     *esp = *esp - sizeof(void(*)());
