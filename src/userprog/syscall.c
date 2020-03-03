@@ -20,10 +20,12 @@ syscall_init (void)
 
 static void
 syscall_handler (struct intr_frame *f UNUSED) {
-  if(is_kernel_vaddr(f->esp) || f->esp < 0x08048000){
+  if(is_kernel_vaddr(f->esp) || pagedir_get_page(thread_current()->pagedir, f->esp) == NULL){
     exit(-1);
   }
+
   int system_call = *(int*)(f->esp);
+
 
 
   switch(system_call){
@@ -33,7 +35,7 @@ syscall_handler (struct intr_frame *f UNUSED) {
       break;
     }
     case SYS_EXIT:{
-      if(is_user_vaddr(f->esp+4)){
+      if(is_user_vaddr(f->esp+4) && pagedir_get_page(thread_current()->pagedir, f->esp+4) != NULL){
         int status = *(int*)(f->esp+4);
         exit(status);
         break;
@@ -44,10 +46,15 @@ syscall_handler (struct intr_frame *f UNUSED) {
 
     }
     case SYS_EXEC:{
-      if(is_user_vaddr(f->esp+4)){
+      if(is_user_vaddr(f->esp+4) && pagedir_get_page(thread_current()->pagedir, f->esp+4) != NULL){
         const char *cmd_line = *(char**)(f->esp+4);
-        if(is_kernel_vaddr(cmd_line) || pagedir_get_page(thread_current()->pagedir, cmd_line) == NULL){
-          exit(-1);
+        int i = 0;
+        while(true){
+          if(is_kernel_vaddr(cmd_line) || pagedir_get_page(thread_current()->pagedir, cmd_line + i) == NULL){
+                exit(-1);
+            }
+          if(cmd_line[i] == NULL) break;
+          i++;
         }
         f->eax = exec(cmd_line);
         break;
@@ -57,7 +64,7 @@ syscall_handler (struct intr_frame *f UNUSED) {
       }
     }
     case SYS_WAIT:{
-      if(is_user_vaddr(f->esp+4)){
+      if(is_user_vaddr(f->esp+4) && pagedir_get_page(thread_current()->pagedir, f->esp+4) != NULL){
         tid_t tid = *(tid_t*)(f->esp+4);
         f->eax = wait(tid);
         break;
@@ -68,7 +75,8 @@ syscall_handler (struct intr_frame *f UNUSED) {
 
     }
     case SYS_CREATE:{
-      if(is_user_vaddr(f->esp+8)){
+      if(is_user_vaddr(f->esp+8) && pagedir_get_page(thread_current()->pagedir, f->esp+4) != NULL
+        && pagedir_get_page(thread_current()->pagedir, f->esp+8) != NULL){
         const char* file = *(char**)(f->esp+4);
         unsigned inital_size = *(unsigned*)(f->esp+8);
         int i = 0;
@@ -90,7 +98,7 @@ syscall_handler (struct intr_frame *f UNUSED) {
 
     }
     case SYS_OPEN:{
-      if(is_user_vaddr(f->esp+4)){
+      if(is_user_vaddr(f->esp+4) && pagedir_get_page(thread_current()->pagedir, f->esp+4) != NULL){
         const char *file_name = *(char**)(f->esp+4);
         int i = 0;
         while(true){
@@ -111,7 +119,9 @@ syscall_handler (struct intr_frame *f UNUSED) {
 
     }
     case SYS_READ:{
-      if(is_user_vaddr(f->esp+12)){
+      if(is_user_vaddr(f->esp+12) && pagedir_get_page(thread_current()->pagedir, f->esp+4) != NULL
+        && pagedir_get_page(thread_current()->pagedir, f->esp+8) != NULL
+          && pagedir_get_page(thread_current()->pagedir, f->esp+12) != NULL){
         int fd = *(int*)(f->esp+4);
         void *buffer = *(void**)(f->esp+8);
         unsigned size = *(unsigned*)(f->esp+12);
@@ -129,7 +139,9 @@ syscall_handler (struct intr_frame *f UNUSED) {
 
     }
     case SYS_WRITE:{
-      if(is_user_vaddr(f->esp+12)){
+      if(is_user_vaddr(f->esp+12) && pagedir_get_page(thread_current()->pagedir, f->esp+4) != NULL
+        && pagedir_get_page(thread_current()->pagedir, f->esp+8) != NULL
+          && pagedir_get_page(thread_current()->pagedir, f->esp+12) != NULL){
         int fd = *(int*)(f->esp+4);
         void *buffer = *(void**)(f->esp+8);
         unsigned size = *(unsigned*)(f->esp+12);
@@ -153,7 +165,7 @@ syscall_handler (struct intr_frame *f UNUSED) {
 
     }
     case SYS_CLOSE:{
-      if(is_user_vaddr(f->esp+4)){
+      if(is_user_vaddr(f->esp+4) && pagedir_get_page(thread_current()->pagedir, f->esp+4) != NULL){
         int fd = *(int*)(f->esp+4);
         if(fd < 0 || fd > 130){
           exit(-1);
@@ -285,9 +297,5 @@ int write(int fd, void *buffer, unsigned size){
 void exit(int status){
   struct thread *t = thread_current();
   t->parent->exit_status = status;
-  /*if(t->parent != NULL){
-    sema_up(&t->parent->sema);
-  }
-  printf(" %s: exit(%d)\n", t->name, status);*/
   thread_exit();
 }

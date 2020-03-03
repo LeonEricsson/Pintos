@@ -289,6 +289,11 @@ thread_exit (void){
 
 #ifdef USERPROG
 
+  if(t->parent != NULL){
+    sema_up(&t->parent->sema);
+    printf("%s: exit(%d)\n", t->name, t->parent->exit_status);
+  }
+
   /* Close all open files */
   for(int i = 2; i < 130 ; i++){
     if(t->fd_list[i] != NULL){
@@ -301,29 +306,32 @@ thread_exit (void){
      in the family*/
   struct list_elem *e;
   for (e = list_begin (&t->families); e != list_end (&t->families);
-       e = list_remove(e)){
+       e = list_next(e)){
 
       struct parent_child *f = list_entry (e, struct parent_child, elem);
-      //lock_acquire(&f->lock);
+      lock_acquire(&f->lock);
       f->alive_count--;
+      struct list_elem *temp = e->prev;
+      list_remove(e);
+      e = temp;
       if(f->alive_count == 0){
         palloc_free_page(f);
       }
       else{
-        //lock_release(&f->lock);
+        lock_release(&f->lock);
       }
     }
 
   /* Decrement the alive_count in the single relation where this thread is a child,
    deallocate the memory for said relation if this thread is the last in that relation */
  if(t->parent != NULL){
-    //lock_acquire(&t->parent->lock);
+    lock_acquire(&t->parent->lock);
     t->parent->alive_count--;
     if(t->parent->alive_count == 0){
       palloc_free_page(t->parent);
     }
     else{
-      //lock_release(&t->parent->lock);
+      lock_release(&t->parent->lock);
     }
   }
 
@@ -369,15 +377,15 @@ thread_sleep()
     for (e = list_begin (&sleeping_list); e != list_end (&sleeping_list);
          e = list_next(e))
       {
-        struct thread *t = list_entry (e, struct thread, elem);
+        struct thread *t = list_entry (e, struct thread, elem2);
         if(t->end > cur->end){
-          list_insert(e, &cur->elem);
+          list_insert(e, &cur->elem2);
           break;
         }
       }
   }
   else{
-    list_push_back(&sleeping_list, &cur->elem);
+    list_push_back(&sleeping_list, &cur->elem2);
   }
   cur->status = THREAD_SLEEPING;
   schedule();
@@ -545,13 +553,13 @@ next_thread_to_run (void)
   for (e = list_begin (&sleeping_list); e != list_end (&sleeping_list);
        e = list_next(e))
     {
-      struct thread *t = list_entry (e, struct thread, elem);
+      struct thread *t = list_entry (e, struct thread, elem2);
       if(t->end <= ticks){
         list_size(&sleeping_list);
 
         struct list_elem* temp = e->prev;
         list_remove(e);
-        list_push_back(&ready_list, e);
+        list_push_back(&ready_list, &t->elem);
         e = temp;
         t->status = THREAD_READY;
       }
