@@ -138,7 +138,7 @@ syscall_handler (struct intr_frame *f UNUSED) {
     case SYS_FILESIZE:{
       if(is_user_vaddr(f->esp+4) && pagedir_get_page(thread_current()->pagedir, f->esp+4) != NULL){
         int fd = *(int*)(f->esp+4);
-        filesize(fd);
+        f->eax =  filesize(fd);
         break;
       }
       else{
@@ -244,9 +244,9 @@ Synchronize:
 
 SYS_READ ✔
 SYS_WRITE ✔
-SYS_CREATE
-SYS_OPEN
-SYS_CLOSE
+SYS_CREATE ✔
+SYS_OPEN ✔
+SYS_CLOSE ✔
 
 
 */
