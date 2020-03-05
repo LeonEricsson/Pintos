@@ -141,9 +141,9 @@ process_wait (tid_t child_tid )
   struct parent_child* parent_child = NULL;
   struct list_elem *e;
   for (e = list_begin (&t->families); e != list_end (&t->families);
-       e = list_remove(e)){
+       e = list_next(e)){
       struct parent_child *f = list_entry (e, struct parent_child, elem);
-      if(f->tid = child_tid){
+      if(f->tid == child_tid){
         parent_child = f;
         break;
       }

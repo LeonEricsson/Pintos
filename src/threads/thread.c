@@ -289,9 +289,12 @@ thread_exit (void){
 
 #ifdef USERPROG
 
+
   if(t->parent != NULL){
-    sema_up(&t->parent->sema);
     printf("%s: exit(%d)\n", t->name, t->parent->exit_status);
+    sema_up(&t->parent->sema);
+
+
   }
 
   /* Close all open files */
@@ -334,6 +337,7 @@ thread_exit (void){
       lock_release(&t->parent->lock);
     }
   }
+
 
   process_exit ();
 #endif

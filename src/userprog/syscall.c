@@ -12,6 +12,8 @@
 
 static void syscall_handler (struct intr_frame *);
 
+
+
 void
 syscall_init (void)
 {
@@ -63,6 +65,7 @@ syscall_handler (struct intr_frame *f UNUSED) {
         exit(-1);
       }
     }
+
     case SYS_WAIT:{
       if(is_user_vaddr(f->esp+4) && pagedir_get_page(thread_current()->pagedir, f->esp+4) != NULL){
         tid_t tid = *(tid_t*)(f->esp+4);
@@ -95,6 +98,23 @@ syscall_handler (struct intr_frame *f UNUSED) {
       }
     }
     case SYS_REMOVE:{
+      if(is_user_vaddr(f->esp+4) && pagedir_get_page(thread_current()->pagedir, f->esp+4) != NULL){
+        const char* file = *(char**)(f->esp+4);
+        int i = 0;
+        while(true){
+          if(is_kernel_vaddr(file + i) || pagedir_get_page(thread_current()->pagedir, file + i) == NULL){
+                exit(-1);
+            }
+          if(file[i] == NULL) break;
+          i++;
+        }
+        f->eax = remove(file);
+        break;
+      }
+      else{
+        exit(-1);
+      }
+
 
     }
     case SYS_OPEN:{
@@ -116,6 +136,15 @@ syscall_handler (struct intr_frame *f UNUSED) {
       }
     }
     case SYS_FILESIZE:{
+      if(is_user_vaddr(f->esp+4) && pagedir_get_page(thread_current()->pagedir, f->esp+4) != NULL){
+        int fd = *(int*)(f->esp+4);
+        filesize(fd);
+        break;
+      }
+      else{
+        exit(-1);
+      }
+
 
     }
     case SYS_READ:{
@@ -158,10 +187,26 @@ syscall_handler (struct intr_frame *f UNUSED) {
       }
     }
     case SYS_SEEK:{
-
-
+      if(is_user_vaddr(f->esp+4) && pagedir_get_page(thread_current()->pagedir, f->esp+4) != NULL
+        && pagedir_get_page(thread_current()->pagedir, f->esp+8) != NULL){
+        int fd = *(int*)(f->esp+4);
+        unsigned position = *(unsigned*)(f->esp+8);
+        seek(fd, position);
+        break;
+      }
+      else{
+        exit(-1);
+      }
     }
     case SYS_TELL:{
+      if(is_user_vaddr(f->esp+4) && pagedir_get_page(thread_current()->pagedir, f->esp+4) != NULL){
+        int fd = *(int*)(f->esp+4);
+        f->eax = tell(fd);
+        break;
+      }
+      else{
+        exit(-1);
+      }
 
     }
     case SYS_CLOSE:{
@@ -185,8 +230,23 @@ syscall_handler (struct intr_frame *f UNUSED) {
 
 // ***************** System call implementation *************************
 
-/*    Questions
+/*    Assignment
 
+Implement:
+
+SYS_SEEK ✔
+SYS_TELL ✔
+SYS_FILESIZE ✔
+SYS_REMOVE ✔
+
+
+Synchronize:
+
+SYS_READ ✔
+SYS_WRITE ✔
+SYS_CREATE
+SYS_OPEN
+SYS_CLOSE
 
 
 */
@@ -196,25 +256,7 @@ void halt(){
   power_off();
 }
 
-
 int wait(tid_t tid){
-    /*struct thread *t = thread_current();
-    struct parent_child* parent_child;
-    struct list_elem *e;
-    for (e = list_begin (&t->families); e != list_end (&t->families);
-         e = list_remove(e)){
-        struct parent_child *f = list_entry (e, struct parent_child, elem);
-        if(f->tid = tid){
-          parent_child = f;
-          break;
-        }
-      }
-<<<<<<< Updated upstream
-    sema_down(parent_child->sema);
-=======
-    sema_down(&parent_child->sema);
->>>>>>> Stashed changes
-    return  parent_child->exit_status;*/
     return process_wait(tid);
 }
 
@@ -227,6 +269,9 @@ bool create (const char *file, unsigned inital_size){
   return filesys_create(file, inital_size);
 }
 
+bool remove(const char *file){
+  return filesys_remove(file);
+}
 
 int open (const char *file_name){
   struct file *file = filesys_open(file_name);
@@ -244,15 +289,21 @@ int open (const char *file_name){
   }
 }
 
-// Måste kolla att FD är en inte mellan 0 och 128
 void close(int fd){
-
   if(thread_current()->fd_list[fd] != NULL){
     file_close(thread_current()->fd_list[fd]);
     thread_current()->fd_list[fd] = NULL;
   }
 }
 
+int filesize(int fd){
+  if(thread_current()->fd_list[fd] != NULL){
+    return file_length(thread_current()->fd_list[fd]);
+  }
+  else{
+    return -1;
+  }
+}
 
 int read(int fd, void *buffer, unsigned size){
   if(fd == 0){
@@ -263,8 +314,10 @@ int read(int fd, void *buffer, unsigned size){
     return size;
   }
   else if(fd >= 2 && fd <= 130){
-    if(thread_current()->fd_list[fd] != NULL){
-      return file_read(thread_current()->fd_list[fd], buffer, size);
+    struct thread *t = thread_current();
+    if(t->fd_list[fd] != NULL){
+      int read = file_read(t->fd_list[fd], buffer, size);
+      return read;
     }
     else{
       return -1;
@@ -282,8 +335,11 @@ int write(int fd, void *buffer, unsigned size){
     return size;
   }
   else if(fd >= 2 && fd <= 130){
-    if(thread_current()->fd_list[fd] != NULL){
-      return file_write(thread_current()->fd_list[fd], buffer, size);
+    struct thread *t = thread_current();
+    if(t->fd_list[fd] != NULL){
+      int write = file_write(t->fd_list[fd], buffer, size);
+      return write;
+
     }
     else{
       return -1;
@@ -293,6 +349,35 @@ int write(int fd, void *buffer, unsigned size){
     return -1;
   }
 }
+
+// Is setting pos to size the end of the file?
+
+void seek(int fd, unsigned position){
+  int size = filesize(fd);
+  struct thread *t = thread_current();
+  if(t->fd_list[fd] != NULL){
+    if(position <= size){
+      file_seek(t->fd_list[fd], position);
+    }
+    else{
+      file_seek(t->fd_list[fd], size);
+    }
+  }
+  else{
+
+    return -1;
+  }
+}
+
+unsigned tell(int fd){
+  if(thread_current()->fd_list[fd] != NULL){
+    return file_tell(thread_current()->fd_list[fd]);
+  }
+  else{
+    return -1;
+  }
+}
+
 
 void exit(int status){
   struct thread *t = thread_current();
