@@ -123,14 +123,20 @@ inode_open (disk_sector_t sector)
        e = list_next (e))
     {
       inode = list_entry (e, struct inode, elem);
-      if (inode->sector == sector)
-        {
-          //lock_aquire(&inode->lock);
-          inode_reopen (inode);
-          //lock_release(&inode->lock);
-          return inode;
+      //lock_aquire(&inode->lock);
+      //if(e->prev->next == e){
+        if (inode->sector == sector)
+          {
 
-        }
+            inode_reopen (inode);
+            //lock_release(&inode->lock);
+            return inode;
+
+          }
+        //}
+        //else{
+            //break;
+        //}   
     }
 
   /* Allocate memory. */

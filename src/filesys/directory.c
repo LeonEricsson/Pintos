@@ -41,6 +41,7 @@ dir_open (struct inode *inode)
     {
       dir->inode = inode;
       dir->pos = 0;
+      sema_init(&dir->sema, 1);
       return dir;
     }
   else
@@ -125,12 +126,12 @@ dir_lookup (const struct dir *dir, const char *name,
 
   ASSERT (dir != NULL);
   ASSERT (name != NULL);
-
+  sema_down(&dir->sema);
   if (lookup (dir, name, &e, NULL))
     *inode = inode_open (e.inode_sector);
   else
     *inode = NULL;
-
+  sema_up(&dir->sema);
   return *inode != NULL;
 }
 
@@ -154,6 +155,7 @@ dir_add (struct dir *dir, const char *name, disk_sector_t inode_sector)
   if (*name == '\0' || strlen (name) > NAME_MAX)
     return false;
 
+  sema_down(&dir->sema);
   /* Check that NAME is not in use. */
   if (lookup (dir, name, NULL, NULL))
     goto done;
@@ -177,6 +179,7 @@ dir_add (struct dir *dir, const char *name, disk_sector_t inode_sector)
   success = inode_write_at (dir->inode, &e, sizeof e, ofs) == sizeof e;
 
  done:
+ sema_up(&dir->sema);
   return success;
 }
 
@@ -186,6 +189,7 @@ dir_add (struct dir *dir, const char *name, disk_sector_t inode_sector)
 bool
 dir_remove (struct dir *dir, const char *name)
 {
+  sema_down(&dir->sema);
   struct dir_entry e;
   struct inode *inode = NULL;
   bool success = false;
@@ -214,6 +218,7 @@ dir_remove (struct dir *dir, const char *name)
 
  done:
   inode_close (inode);
+  sema_up(&dir->sema);
   return success;
 }
 
