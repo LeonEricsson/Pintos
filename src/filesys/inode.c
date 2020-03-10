@@ -136,8 +136,10 @@ inode_open (disk_sector_t sector)
 
   /* Allocate memory. */
   inode = malloc (sizeof *inode);
-  if (inode == NULL)
+  if (inode == NULL){
+    lock_release(&inode_lock)
     return NULL;
+  }
 
   /* Initialize. */
   list_push_front (&open_inodes, &inode->elem);
@@ -197,7 +199,7 @@ inode_close (struct inode *inode)
         }
       free (inode);
     }
-    lock_release(&inode_lock);
+  lock_release(&inode_lock);
 
 
 }
