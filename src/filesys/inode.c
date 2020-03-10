@@ -38,7 +38,6 @@ struct inode
     bool removed;                       /* True if deleted, false otherwise. */
     int deny_write_cnt;                 /* 0: writes ok, >0: deny writes. */
     struct inode_disk data;             /* Inode content. */
-    struct lock lock;                    /* Lock for inode */
     struct semaphore sema_w;
     struct semaphore sema_r;
   };
@@ -61,11 +60,15 @@ byte_to_sector (const struct inode *inode, off_t pos)
    returns the same `struct inode'. */
 static struct list open_inodes;
 
+/* Lock for open_inodes list to make sure only one thread manipulates this*/
+struct lock inode_lock;
+
 /* Initializes the inode module. */
 void
 inode_init (void)
 {
   list_init (&open_inodes);
+  lock_init (&inode_lock);
 }
 
 /* Initializes an inode with LENGTH bytes of data and
@@ -117,27 +120,19 @@ inode_open (disk_sector_t sector)
 {
   struct list_elem *e;
   struct inode *inode;
-
+  lock_acquire(&inode_lock);
   /* Check whether this inode is already open. */
   for (e = list_begin (&open_inodes); e != list_end (&open_inodes);
        e = list_next (e))
     {
       inode = list_entry (e, struct inode, elem);
-      //lock_aquire(&inode->lock);
-      //if(e->prev->next == e){
-        if (inode->sector == sector)
-          {
-
-            inode_reopen (inode);
-            //lock_release(&inode->lock);
-            return inode;
-
-          }
-        //}
-        //else{
-            //break;
-        //}   
+      if (inode->sector == sector)  {
+          inode_reopen (inode);
+          lock_release(&inode_lock);
+          return inode;
+        }
     }
+
 
   /* Allocate memory. */
   inode = malloc (sizeof *inode);
@@ -146,7 +141,6 @@ inode_open (disk_sector_t sector)
 
   /* Initialize. */
   list_push_front (&open_inodes, &inode->elem);
-  lock_init(&inode->lock);
   sema_init(&inode->sema_w, 1);
   sema_init(&inode->sema_r, 1);
   inode->sector = sector;
@@ -154,6 +148,7 @@ inode_open (disk_sector_t sector)
   inode->deny_write_cnt = 0;
   inode->removed = false;
   disk_read (filesys_disk, inode->sector, &inode->data);
+  lock_release(&inode_lock);
   return inode;
 }
 
@@ -186,7 +181,7 @@ inode_close (struct inode *inode)
   /* Ignore null pointer. */
   if (inode == NULL)
     return;
-  //lock_aquire(&inode->lock);
+  lock_acquire(&inode_lock);
   /* Release resources if this was the last opener. */
   if (--inode->open_cnt == 0)
     {
@@ -202,9 +197,8 @@ inode_close (struct inode *inode)
         }
       free (inode);
     }
-  else{
-    //lock_release(&inode->lock);
-  }
+    lock_release(&inode_lock);
+
 
 }
 
